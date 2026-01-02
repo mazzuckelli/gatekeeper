@@ -10,7 +10,8 @@
 
 // Approved origins - requests from other origins will be rejected
 const ALLOWED_ORIGINS = [
-  'https://xenon-engine-web.vercel.app',  // Production
+  'https://gatekeeper-nine.vercel.app',    // Gatekeeper production
+  'https://xenon-engine-web.vercel.app',   // Engine production
   'http://localhost:3000',                 // Local development
   'http://127.0.0.1:3000',                 // Local development (alt)
   'http://localhost:3001',                 // Gatekeeper test app
