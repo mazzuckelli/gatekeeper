@@ -75,22 +75,24 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
     // Authenticate user
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return jsonResponse({ error: 'Missing authorization header' }, 401, corsHeaders);
     }
 
-    const jwt = authHeader.split(' ')[1];
-    const { data: authData, error: authError } = await supabase.auth.getUser(jwt);
+    // Create Supabase client with the user's auth header
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+    });
 
-    if (authError || !authData.user) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
       return jsonResponse({ error: 'Invalid or expired token' }, 401, corsHeaders);
     }
-
-    const user = authData.user;
     const url = new URL(req.url);
 
     // GET: List all authorized apps for this user
