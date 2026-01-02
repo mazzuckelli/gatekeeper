@@ -36,8 +36,10 @@ export default function Profile() {
   const [timezone, setTimezone] = useState('UTC');
 
   useEffect(() => {
-    fetchProfile();
-  }, []);
+    if (session?.access_token) {
+      fetchProfile();
+    }
+  }, [session]);
 
   const fetchProfile = async () => {
     if (!session?.access_token) return;

@@ -187,7 +187,12 @@ serve(async (req) => {
     const { data: authData, error: authError } = await supabase.auth.getUser(jwt);
 
     if (authError || !authData.user) {
-      return jsonResponse({ error: 'Invalid or expired token' }, 401, corsHeaders);
+      console.error('[USER-PROFILE] Auth error:', authError?.message, authError?.status);
+      return jsonResponse({
+        error: 'Invalid or expired token',
+        code: 401,
+        details: authError?.message
+      }, 401, corsHeaders);
     }
 
     const user = authData.user;
