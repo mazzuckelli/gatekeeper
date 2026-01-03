@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Apps from './pages/Apps';
 import Security from './pages/Security';
+import Developer from './pages/Developer';
 import './styles.css';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -81,6 +82,7 @@ function AppRoutes() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/apps" element={<Apps />} />
         <Route path="/security" element={<Security />} />
+        <Route path="/developer" element={<Developer />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

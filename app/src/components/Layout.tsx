@@ -38,6 +38,10 @@ export default function Layout() {
             <span className="nav-icon">🔒</span>
             Security
           </NavLink>
+          <NavLink to="/developer" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+            <span className="nav-icon">🛠️</span>
+            Developer
+          </NavLink>
         </div>
 
         <div className="sidebar-footer">
