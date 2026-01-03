@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { initializeGhostIdentity, clearGhostIdentity, verifyImportedSecret } from '../lib/ghostKeys';
+import { initializeGhostIdentity, clearGhostCache, verifyImportedSecret } from '../lib/ghostKeys';
 import { Session, User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -104,10 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
 
-    // Clear ghost identity from storage
-    clearGhostIdentity();
+    // Clear ghost identity cache (but preserve the secret for re-login)
+    clearGhostCache();
     setGhostId(null);
-    console.log('[AUTH] User signed out, ghost identity cleared');
+    console.log('[AUTH] User signed out, ghost cache cleared (secret preserved)');
   };
 
   const value = {

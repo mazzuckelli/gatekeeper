@@ -204,10 +204,21 @@ export function exportGhostSecretForQR(userId: string): string {
 }
 
 /**
- * Clear ghost identity (logout or reset)
+ * Clear ghost identity cache (for logout)
+ * Preserves the ghost_secret so the same ghost_id is used on re-login
+ */
+export function clearGhostCache(): void {
+  localStorage.removeItem(GHOST_ID_CACHE_KEY);
+  console.log('[GHOST] Ghost identity cache cleared (secret preserved)');
+}
+
+/**
+ * Fully clear ghost identity (for account reset or device wipe)
+ * WARNING: This deletes the ghost_secret - the ghost_id cannot be recovered
+ * unless the user has a QR backup!
  */
 export function clearGhostIdentity(): void {
   localStorage.removeItem(GHOST_SECRET_KEY);
   localStorage.removeItem(GHOST_ID_CACHE_KEY);
-  console.log('[GHOST] Ghost identity cleared');
+  console.log('[GHOST] Ghost identity fully cleared (secret deleted)');
 }
