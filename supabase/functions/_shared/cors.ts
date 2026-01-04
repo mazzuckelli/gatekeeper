@@ -10,16 +10,24 @@
 
 // Approved origins - requests from other origins will be rejected
 const ALLOWED_ORIGINS = [
-  'https://gatekeeper-nine.vercel.app',    // Gatekeeper production
-  'https://xenon-engine-web.vercel.app',   // Engine production
-  'http://localhost:3000',                 // Local development
-  'http://127.0.0.1:3000',                 // Local development (alt)
+  // Production
+  'https://gatekeeper-nine.vercel.app',    // Gatekeeper web production
+  'https://xenon-engine-web.vercel.app',   // Goals web production
+
+  // Dawg Tag Mobile (Expo)
+  'exp://localhost:8081',                  // Expo Go development
+  'exp://192.168.1.1:8081',                // Expo Go on local network (adjust IP as needed)
+
+  // Local development
+  'http://localhost:3000',                 // Local web development
+  'http://127.0.0.1:3000',                 // Local web development (alt)
   'http://localhost:3001',                 // Gatekeeper test app
   'http://127.0.0.1:3001',                 // Gatekeeper test app (alt)
   'http://localhost:5173',                 // Vite dev server
   'http://127.0.0.1:5173',                 // Vite dev server (alt)
   'http://localhost:8080',                 // Alternative local
-  'http://localhost:19006',                // Expo dev
+  'http://localhost:8081',                 // Expo Metro bundler
+  'http://localhost:19006',                // Expo web
 ] as const;
 
 /**
