@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { clearGhostIdentity } from '../lib/ghostKeys';
+
+/**
+ * Security Settings Page
+ *
+ * NOTE: Ghost identity reset has been moved to Dawg Tag.
+ * This page now handles password and session management only.
+ */
 
 export default function Security() {
   const { user, signOut } = useAuth();
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
@@ -22,8 +27,8 @@ export default function Security() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -37,7 +42,6 @@ export default function Security() {
       if (error) throw error;
 
       setSuccess('Password updated successfully');
-      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
@@ -53,33 +57,7 @@ export default function Security() {
     }
 
     try {
-      // Sign out from Supabase (this invalidates all sessions)
       await supabase.auth.signOut({ scope: 'global' });
-      clearGhostIdentity();
-      window.location.href = '/login';
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleResetGhostIdentity = async () => {
-    if (!confirm('WARNING: This will generate a new ghost_id. Apps will see you as a completely new user and you will lose access to any data associated with your current ghost_id. This cannot be undone. Are you sure?')) {
-      return;
-    }
-
-    if (!confirm('This is your last chance. All your app data will become inaccessible. Type "RESET" to confirm.')) {
-      return;
-    }
-
-    const confirmation = prompt('Type RESET to confirm:');
-    if (confirmation !== 'RESET') {
-      return;
-    }
-
-    try {
-      // Clear the ghost secret - next login will generate a new one
-      clearGhostIdentity();
-      await signOut();
       window.location.href = '/login';
     } catch (err: any) {
       setError(err.message);
@@ -109,7 +87,7 @@ export default function Security() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Enter new password"
-              minLength={6}
+              minLength={8}
             />
           </div>
 
@@ -121,7 +99,7 @@ export default function Security() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm new password"
-              minLength={6}
+              minLength={8}
             />
           </div>
 
@@ -142,21 +120,14 @@ export default function Security() {
         </button>
       </div>
 
-      {/* Danger Zone */}
-      <div className="card danger-zone">
-        <h2>Danger Zone</h2>
-
-        <div className="danger-item">
-          <div>
-            <h3>Reset Ghost Identity</h3>
-            <p>
-              Generate a new ghost_id. Apps will see you as a completely new user.
-              All data associated with your current ghost_id will become inaccessible.
-            </p>
-          </div>
-          <button className="btn-danger" onClick={handleResetGhostIdentity}>
-            Reset Ghost Identity
-          </button>
+      {/* Ghost Identity Notice */}
+      <div className="card">
+        <h2>Ghost Identity</h2>
+        <div className="info-note">
+          <p>
+            Your ghost identity is managed by <strong>Dawg Tag</strong> on your device.
+            To reset your ghost identity or manage app connections, use the Dawg Tag app.
+          </p>
         </div>
       </div>
 

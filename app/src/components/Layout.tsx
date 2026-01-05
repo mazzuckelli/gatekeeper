@@ -30,10 +30,6 @@ export default function Layout() {
             <span className="nav-icon">👤</span>
             Profile
           </NavLink>
-          <NavLink to="/apps" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-            <span className="nav-icon">🔗</span>
-            Connected Apps
-          </NavLink>
           <NavLink to="/security" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
             <span className="nav-icon">🔒</span>
             Security

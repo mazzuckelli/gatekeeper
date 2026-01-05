@@ -69,7 +69,7 @@ GRANT EXECUTE ON FUNCTION cleanup_old_rate_limits() TO service_role;
 
 -- Update comments to reflect new architecture
 COMMENT ON TABLE user_profiles IS 'User profiles with subscription info. Gatekeeper knows WHO you are (identity), never WHAT you do (behavior).';
-COMMENT ON TABLE registered_apps IS 'First-party app configuration. Kept for potential settings storage. Third-party app connections managed by Dawg Tag.';
+COMMENT ON TABLE registered_apps IS 'App registry for both first-party and third-party apps. Developers register apps here via the web portal. User authorization of apps is handled by Dawg Tag locally.';
 COMMENT ON TABLE audit_logs IS 'Security audit trail. Logs auth events but NEVER behavioral data or ghost_ids.';
 COMMENT ON TABLE rate_limits IS 'Rate limiting for abuse prevention on auth endpoints.';
 

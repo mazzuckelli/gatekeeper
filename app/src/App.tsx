@@ -6,10 +6,22 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
-import Apps from './pages/Apps';
 import Security from './pages/Security';
 import Developer from './pages/Developer';
 import './styles.css';
+
+/**
+ * Gatekeeper Web App
+ *
+ * Routes:
+ * - / (Dashboard): Account overview, subscription status
+ * - /profile: Edit display name, timezone, preferences
+ * - /security: Password, sessions
+ * - /developer: Register and manage apps (for developers)
+ *
+ * NOTE: App connections page has been removed.
+ * User app connections are now managed by Dawg Tag on-device.
+ */
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -80,7 +92,6 @@ function AppRoutes() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/apps" element={<Apps />} />
         <Route path="/security" element={<Security />} />
         <Route path="/developer" element={<Developer />} />
       </Route>

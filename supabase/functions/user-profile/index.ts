@@ -9,28 +9,22 @@
  * - PUT/PATCH: Update user profile (limited fields)
  */
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
-  getCorsHeaders,
   isValidUrl,
   isValidTimezone,
   isValidDisplayName,
   isValidLocale,
 } from '../_shared/security.ts';
+import {
+  handleCors,
+  jsonResponse,
+  errorResponse,
+  getCorsHeaders,
+} from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-// Allowed origins
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:8080',
-  'http://localhost:19006',
-];
-const PRODUCTION_ORIGINS = Deno.env.get('ALLOWED_ORIGINS')?.split(',') || [];
-const ALLOWED_ORIGINS = [...DEFAULT_ALLOWED_ORIGINS, ...PRODUCTION_ORIGINS];
 
 // Fields that users are allowed to update
 const ALLOWED_UPDATE_FIELDS = [
@@ -151,38 +145,21 @@ function validateProfileUpdate(body: ProfileUpdate): ValidationResult {
   return { valid: true, sanitized };
 }
 
-/**
- * Create JSON response with CORS headers
- */
-function jsonResponse(
-  data: unknown,
-  status: number,
-  corsHeaders: Record<string, string>
-): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
-serve(async (req) => {
-  const requestOrigin = req.headers.get('origin');
-  const corsHeaders = getCorsHeaders(requestOrigin, { allowedOrigins: ALLOWED_ORIGINS });
+Deno.serve(async (req) => {
+  const origin = req.headers.get('Origin');
 
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     // 1. AUTHENTICATE USER
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      return jsonResponse({ error: 'Missing authorization header' }, 401, corsHeaders);
+      return errorResponse('Missing authorization header', 401, origin);
     }
 
     // Create Supabase client with the user's auth header
-    // This allows the client to authenticate as the user
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       global: {
         headers: { Authorization: authHeader },
@@ -198,7 +175,7 @@ serve(async (req) => {
         error: 'Invalid or expired token',
         code: 401,
         details: authError?.message
-      }, 401, corsHeaders);
+      }, 401, origin);
     }
 
     // 2. HANDLE REQUEST METHOD
@@ -229,7 +206,7 @@ serve(async (req) => {
 
       if (fetchError) {
         console.error('[PROFILE] Fetch error:', fetchError);
-        return jsonResponse({ error: 'Failed to fetch profile' }, 500, corsHeaders);
+        return errorResponse('Failed to fetch profile', 500, origin);
       }
 
       // Update last_seen
@@ -249,7 +226,7 @@ serve(async (req) => {
           ...profile,
         },
         200,
-        corsHeaders
+        origin
       );
 
     } else if (req.method === 'PUT' || req.method === 'PATCH') {
@@ -258,13 +235,13 @@ serve(async (req) => {
       try {
         body = await req.json();
       } catch {
-        return jsonResponse({ error: 'Invalid JSON body' }, 400, corsHeaders);
+        return errorResponse('Invalid JSON body', 400, origin);
       }
 
       // Validate and sanitize updates
       const validation = validateProfileUpdate(body);
       if (!validation.valid) {
-        return jsonResponse({ error: validation.error }, 400, corsHeaders);
+        return errorResponse(validation.error || 'Validation failed', 400, origin);
       }
 
       const updates = validation.sanitized!;
@@ -273,7 +250,7 @@ serve(async (req) => {
         return jsonResponse(
           { error: 'No valid fields to update', allowed_fields: ALLOWED_UPDATE_FIELDS },
           400,
-          corsHeaders
+          origin
         );
       }
 
@@ -287,7 +264,7 @@ serve(async (req) => {
 
       if (updateError) {
         console.error('[PROFILE] Update error:', updateError);
-        return jsonResponse({ error: 'Failed to update profile' }, 500, corsHeaders);
+        return errorResponse('Failed to update profile', 500, origin);
       }
 
       // Log audit event
@@ -313,16 +290,15 @@ serve(async (req) => {
           profile: updated,
         },
         200,
-        corsHeaders
+        origin
       );
 
     } else {
-      return jsonResponse({ error: 'Method not allowed' }, 405, corsHeaders);
+      return errorResponse('Method not allowed', 405, origin);
     }
 
   } catch (error) {
     console.error('[PROFILE] Unexpected error:', error);
-    const corsHeaders = getCorsHeaders(req.headers.get('origin'), { allowedOrigins: ALLOWED_ORIGINS });
-    return jsonResponse({ error: 'Internal server error' }, 500, corsHeaders);
+    return errorResponse('Internal server error', 500, origin);
   }
 });
