@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import Security from './pages/Security';
 import Developer from './pages/Developer';
+import Auth from './pages/Auth';
 import './styles.css';
 
 /**
@@ -16,8 +17,9 @@ import './styles.css';
  * Routes:
  * - / (Dashboard): Account overview, subscription status
  * - /profile: Edit display name, timezone, preferences
- * - /security: Password, sessions
+ * - /security: Password, sessions, passkey management
  * - /developer: Register and manage apps (for developers)
+ * - /auth: Dawg Tag authentication endpoint (passkey auth with callback)
  *
  * NOTE: App connections page has been removed.
  * User app connections are now managed by Dawg Tag on-device.
@@ -81,6 +83,9 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+
+      {/* Auth route for Dawg Tag (no session required, uses passkey) */}
+      <Route path="/auth" element={<Auth />} />
 
       {/* Protected routes with layout */}
       <Route
