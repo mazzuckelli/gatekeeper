@@ -121,11 +121,12 @@ export async function registerPasskey(
         { type: 'public-key', alg: -257 }, // RS256
       ],
       authenticatorSelection: {
-        authenticatorAttachment: 'platform', // Use device biometric
-        userVerification: 'required',
+        // Don't restrict to platform - let browser/device decide
+        // This allows both Face ID/Touch ID AND security keys
+        userVerification: 'preferred', // Changed from 'required' to avoid mobile issues
         residentKey: 'preferred',
       },
-      timeout: 60000,
+      timeout: 120000, // Increased timeout for slow biometric prompts
       attestation: 'none',
     };
 
@@ -237,8 +238,8 @@ export async function authenticateWithPasskey(
         ? base64urlToBuffer(serverChallenge)
         : generateChallenge(),
       rpId: rpId,
-      userVerification: 'required',
-      timeout: 60000,
+      userVerification: 'preferred', // Changed from 'required' to avoid mobile issues
+      timeout: 120000, // Increased timeout
       allowCredentials: credentialId ? [{
         type: 'public-key',
         id: base64urlToBuffer(credentialId),

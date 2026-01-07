@@ -1182,8 +1182,91 @@ body {
   font-size: 13px;
 }
 
+/* Mobile Header */
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: #111;
+  border-bottom: 1px solid #222;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.mobile-header h1 {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #4CAF50;
+}
+
+.mobile-menu-btn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+}
+
+/* Mobile Menu Overlay */
+.mobile-menu-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 200;
+}
+
+.mobile-menu {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 100%;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-menu-header {
+  padding: 20px;
+  border-bottom: 1px solid #222;
+}
+
+.mobile-menu-header .user-email {
+  font-size: 13px;
+  color: #888;
+}
+
+.mobile-nav-links {
+  flex: 1;
+  padding: 16px 12px;
+}
+
+.mobile-menu-footer {
+  padding: 16px;
+  border-top: 1px solid #222;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .mobile-header {
+    display: flex;
+  }
+
+  .mobile-menu-overlay {
+    display: block;
+  }
+
   .sidebar {
     display: none;
   }
@@ -1191,6 +1274,7 @@ body {
   .main-content {
     margin-left: 0;
     padding: 20px;
+    padding-top: 76px; /* Account for fixed header */
   }
 
   .card-grid {

@@ -1,37 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  isWebAuthnSupported,
-  isPlatformAuthenticatorAvailable,
-  authenticateWithPasskey,
-} from '../lib/webauthn';
+import { supabase } from '../lib/supabase';
 
 /**
  * Auth Page for Dawg Tag
  *
  * This page handles authentication requests from Dawg Tag.
  * Flow:
- * 1. Dawg Tag opens: /auth?callback=dawgtag://auth-callback&app_id=goals
- * 2. User authenticates with passkey (biometric)
- * 3. On success, redirect to callback with user_id token
+ * 1. Dawg Tag opens: /auth?callback=dawgtag://auth-callback
+ * 2. User logs in with email/password
+ * 3. On success, redirect to callback with user_id
  *
- * This page is specifically designed for the Dawg Tag auth flow,
- * not for regular web dashboard login.
+ * This is specifically for the Dawg Tag auth flow.
  */
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [checking, setChecking] = useState(true);
 
-  // WebAuthn state
-  const [webAuthnSupported, setWebAuthnSupported] = useState(false);
-  const [platformAuthAvailable, setPlatformAuthAvailable] = useState(false);
-
-  // Get callback parameters
+  // Get callback URL
   const callbackUrl = searchParams.get('callback');
-  const appId = searchParams.get('app_id');
 
   // Validate callback URL
   const isValidCallback = callbackUrl && (
@@ -40,21 +31,9 @@ export default function Auth() {
     callbackUrl.startsWith('https://')
   );
 
-  // Check WebAuthn support on mount
-  useEffect(() => {
-    const checkWebAuthn = async () => {
-      const supported = isWebAuthnSupported();
-      setWebAuthnSupported(supported);
-      if (supported) {
-        const platformAvailable = await isPlatformAuthenticatorAvailable();
-        setPlatformAuthAvailable(platformAvailable);
-      }
-      setChecking(false);
-    };
-    checkWebAuthn();
-  }, []);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleAuthenticate = async () => {
     if (!isValidCallback) {
       setError('Invalid callback URL');
       return;
@@ -64,25 +43,33 @@ export default function Auth() {
     setError(null);
 
     try {
-      const result = await authenticateWithPasskey();
+      // Authenticate with Supabase
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (result.success && result.userId) {
-        // Build callback URL with authentication result
-        const redirectUrl = new URL(callbackUrl!);
-        redirectUrl.searchParams.set('user_id', result.userId);
-        redirectUrl.searchParams.set('tier', result.tier || 'free');
-        redirectUrl.searchParams.set('status', 'success');
-        if (appId) {
-          redirectUrl.searchParams.set('app_id', appId);
-        }
-
-        // Redirect to Dawg Tag
-        window.location.href = redirectUrl.toString();
-      } else {
-        setError(result.error || 'Authentication failed');
+      if (authError) {
+        throw authError;
       }
+
+      if (!data.user) {
+        throw new Error('Login failed - no user returned');
+      }
+
+      // Build callback URL with user_id
+      const redirectUrl = new URL(callbackUrl!);
+      redirectUrl.searchParams.set('user_id', data.user.id);
+      redirectUrl.searchParams.set('status', 'success');
+
+      // Sign out from web session (we only needed to verify credentials)
+      // The user_id is what Dawg Tag needs, not a session
+      await supabase.auth.signOut();
+
+      // Redirect to Dawg Tag
+      window.location.href = redirectUrl.toString();
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -92,26 +79,9 @@ export default function Auth() {
     if (callbackUrl) {
       const redirectUrl = new URL(callbackUrl);
       redirectUrl.searchParams.set('status', 'cancelled');
-      if (appId) {
-        redirectUrl.searchParams.set('app_id', appId);
-      }
       window.location.href = redirectUrl.toString();
     }
   };
-
-  // Show loading while checking WebAuthn
-  if (checking) {
-    return (
-      <div className="auth-container">
-        <div className="auth-card">
-          <div className="auth-header">
-            <h1>GATEKEEPER</h1>
-            <p>Checking device capabilities...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Show error if no valid callback
   if (!isValidCallback) {
@@ -130,85 +100,61 @@ export default function Auth() {
     );
   }
 
-  // Show error if WebAuthn not supported
-  if (!webAuthnSupported || !platformAuthAvailable) {
-    return (
-      <div className="auth-container">
-        <div className="auth-card">
-          <div className="auth-header">
-            <h1>GATEKEEPER</h1>
-            <p>Device Not Supported</p>
-          </div>
-          <div className="warning-message">
-            {!webAuthnSupported
-              ? 'Your browser does not support passkey authentication.'
-              : 'Your device does not support biometric authentication.'
-            }
-          </div>
-          <p style={{ color: '#888', fontSize: '14px', marginTop: '16px', textAlign: 'center' }}>
-            Please use a device with fingerprint or face recognition enabled.
-          </p>
-          {callbackUrl && (
-            <button
-              className="btn-secondary"
-              onClick={handleCancel}
-              style={{ marginTop: '20px' }}
-            >
-              Cancel and return to app
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
           <h1>GATEKEEPER</h1>
-          <p>Verify your identity to continue</p>
+          <p>Sign in to continue to your app</p>
         </div>
 
         {error && <div className="error-message">{error}</div>}
 
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔐</div>
-          <p style={{ color: '#888', fontSize: '14px', lineHeight: '1.5' }}>
-            Tap the button below to authenticate with your device's biometrics
-            (fingerprint or face recognition).
-          </p>
-        </div>
+        <form className="auth-form" onSubmit={handleLogin}>
+          <div className="form-group">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+              autoComplete="email"
+              autoFocus
+            />
+          </div>
 
-        <button
-          className="btn-passkey"
-          onClick={handleAuthenticate}
-          disabled={loading}
-          style={{ marginBottom: '16px' }}
-        >
-          {loading ? (
-            'Authenticating...'
-          ) : (
-            <>
-              <span className="passkey-icon">👆</span>
-              Authenticate with Biometrics
-            </>
-          )}
-        </button>
+          <div className="form-group">
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
+              autoComplete="current-password"
+            />
+          </div>
+
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
 
         <button
           className="btn-secondary"
           onClick={handleCancel}
           disabled={loading}
+          style={{ marginTop: '16px' }}
         >
           Cancel
         </button>
 
         <div style={{ marginTop: '24px', textAlign: 'center' }}>
           <p style={{ color: '#666', fontSize: '12px' }}>
-            Don't have a passkey registered?
+            Your credentials are verified by Gatekeeper.
             <br />
-            Sign in with email/password first, then register a passkey in Security settings.
+            Your identity stays private with Dawg Tag.
           </p>
         </div>
       </div>
