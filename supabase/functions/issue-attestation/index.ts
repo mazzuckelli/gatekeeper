@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { SignJWT } from "https://deno.land/x/jose@v5.2.0/index.ts";
+import { SignJWT, importJWK } from "https://deno.land/x/jose@v5.2.0/index.ts";
 
 /**
  * Issue Attestation Endpoint
@@ -78,17 +78,9 @@ serve(async (req) => {
       );
     }
 
-    // Parse the JWK
+    // Parse the JWK and import using jose
     const keyData = JSON.parse(signingKeyJson);
-
-    // Import the key for signing
-    const privateKey = await crypto.subtle.importKey(
-      "jwk",
-      keyData,
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["sign"]
-    );
+    const privateKey = await importJWK(keyData, "ES256");
 
     // Create the attestation JWT
     const now = Math.floor(Date.now() / 1000);
