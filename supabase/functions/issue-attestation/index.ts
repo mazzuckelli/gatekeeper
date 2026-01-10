@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
-import { SignJWT, importJWK } from "https://deno.land/x/jose@v5.2.0/index.ts";
+import { SignJWT, importJWK, jwtVerify, createRemoteJWKSet } from "https://deno.land/x/jose@v5.2.0/index.ts";
 
 /**
  * Issue Attestation Endpoint
@@ -14,8 +13,10 @@ import { SignJWT, importJWK } from "https://deno.land/x/jose@v5.2.0/index.ts";
  *
  * Environment variables required:
  * - SUPABASE_URL: Gatekeeper Supabase URL (auto-injected)
- * - SUPABASE_SECRET_KEY: Gatekeeper Supabase secret key (new format: sb_secret_*)
  * - ATTESTATION_SIGNING_KEY: Key to sign attestations (ES256/P-256 JWK)
+ *
+ * JWT Verification:
+ * Uses JWKS endpoint to verify user tokens (works with new sb_publishable/sb_secret keys)
  */
 
 const corsHeaders = {
@@ -47,23 +48,39 @@ serve(async (req) => {
       );
     }
 
-    // Verify the user's session with Supabase
-    // Edge functions have these auto-injected by Supabase
+    // Verify the user's JWT using JWKS (works with new sb_publishable/sb_secret keys)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    // Use secret key for server-side user verification (new format: sb_secret_*)
-    const supabaseKey = Deno.env.get("SUPABASE_SECRET_KEY")!;
 
     // Extract the JWT from the auth header
     const token = authHeader.replace("Bearer ", "");
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Create JWKS verifier using Supabase's public keys endpoint
+    const JWKS = createRemoteJWKSet(
+      new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`)
+    );
 
-    // Get the user from the token - service role can verify any JWT
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
+    let payload;
+    try {
+      const result = await jwtVerify(token, JWKS, {
+        issuer: `${supabaseUrl}/auth/v1`,
+        audience: "authenticated",
+      });
+      payload = result.payload;
+    } catch (jwtError) {
+      console.error("JWT verification failed:", jwtError);
       return new Response(
-        JSON.stringify({ error: "Invalid session" }),
+        JSON.stringify({
+          error: "Invalid session",
+          details: jwtError instanceof Error ? jwtError.message : "Token verification failed",
+        }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // JWT is valid - user is authenticated
+    if (!payload.sub) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token: no subject" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
