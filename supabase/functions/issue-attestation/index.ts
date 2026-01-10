@@ -48,16 +48,18 @@ serve(async (req) => {
     }
 
     // Verify the user's session with Supabase
+    // Edge functions have these auto-injected by Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    // Support both new publishable key format and legacy anon key
-    const supabaseKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
+    // Use service role key for server-side user verification
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Extract the JWT from the auth header
+    const token = authHeader.replace("Bearer ", "");
 
-    // Get the user - this verifies the session is valid
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get the user from the token - service role can verify any JWT
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
       return new Response(
