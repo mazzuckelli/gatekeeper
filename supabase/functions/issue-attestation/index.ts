@@ -13,8 +13,8 @@ import { SignJWT, importJWK } from "https://deno.land/x/jose@v5.2.0/index.ts";
  * The attestation only proves: "A legitimate, authenticated human is present right now."
  *
  * Environment variables required:
- * - SUPABASE_URL: Gatekeeper Supabase URL
- * - SUPABASE_PUBLISHABLE_KEY: Gatekeeper Supabase publishable key (new format: sb_publishable_*)
+ * - SUPABASE_URL: Gatekeeper Supabase URL (auto-injected)
+ * - SUPABASE_SECRET_KEY: Gatekeeper Supabase secret key (new format: sb_secret_*)
  * - ATTESTATION_SIGNING_KEY: Key to sign attestations (ES256/P-256 JWK)
  */
 
@@ -50,8 +50,8 @@ serve(async (req) => {
     // Verify the user's session with Supabase
     // Edge functions have these auto-injected by Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    // Use service role key for server-side user verification
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    // Use secret key for server-side user verification (new format: sb_secret_*)
+    const supabaseKey = Deno.env.get("SUPABASE_SECRET_KEY")!;
 
     // Extract the JWT from the auth header
     const token = authHeader.replace("Bearer ", "");
