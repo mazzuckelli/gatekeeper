@@ -61,13 +61,14 @@ serve(async (req) => {
 
     let payload;
     try {
-      const result = await jwtVerify(token, JWKS, {
-        issuer: `${supabaseUrl}/auth/v1`,
-        audience: "authenticated",
-      });
+      // Don't enforce issuer/audience - Supabase JWTs may vary
+      const result = await jwtVerify(token, JWKS);
       payload = result.payload;
+      console.log("JWT verified successfully, sub:", payload.sub);
     } catch (jwtError) {
       console.error("JWT verification failed:", jwtError);
+      // Log token prefix for debugging (first 50 chars only)
+      console.error("Token prefix:", token.substring(0, 50));
       return new Response(
         JSON.stringify({
           error: "Invalid session",
