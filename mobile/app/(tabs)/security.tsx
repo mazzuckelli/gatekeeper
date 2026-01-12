@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,327 +9,200 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../../src/contexts/AuthContext';
 import { supabase } from '../../src/lib/supabase';
+import { registerPasskey } from '../../src/lib/passkey';
 
-/**
- * Security Screen
- *
- * Password change, biometric setup, session management
- */
+interface PasskeyInfo {
+  id: string;
+  device_name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 export default function SecurityScreen() {
-  const { user } = useAuth();
-  const [currentPassword, setCurrentPassword] = useState('');
+  const { user, session } = useAuth();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState<boolean | null>(null);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  
+  const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
+  const [loadingKeys, setLoadingKeys] = useState(true);
+  const [linkingDevice, setLinkingDevice] = useState(false);
 
-  // Check biometric availability on mount
-  useState(() => {
-    checkBiometricAvailability();
-  });
+  useEffect(() => {
+    // Only load if we have a valid session
+    if (session?.access_token) {
+      loadPasskeys();
+    } else {
+      setLoadingKeys(false);
+    }
+  }, [session]);
 
-  const checkBiometricAvailability = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    setBiometricAvailable(compatible && enrolled);
+  const loadPasskeys = async () => {
+    try {
+      // Ensure we have the most up to date session
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (!currentSession?.access_token) {
+        setLoadingKeys(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('passkey-register', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${currentSession.access_token}`
+        }
+      });
+      
+      if (error) {
+        // Log the specific error from the function
+        console.warn('[Passkey-List] Function error:', error);
+        setPasskeys([]);
+      } else {
+        setPasskeys(data?.passkeys || []);
+      }
+    } catch (err: any) {
+      console.error('[Passkey-List] Exception:', err.message);
+    } finally {
+      setLoadingKeys(false);
+    }
+  };
+
+  const handleLinkDevice = async () => {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    
+    if (!currentSession?.access_token) {
+      Alert.alert('Error', 'Please log in again to register hardware.');
+      return;
+    }
+
+    setLinkingDevice(true);
+    try {
+      const result = await registerPasskey(user?.email || '');
+      if (result.success) {
+        Alert.alert('Success', 'Hardware key registered.');
+        loadPasskeys();
+      } else {
+        Alert.alert('Error', result.error || 'Registration failed');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', 'Hardware communication failed.');
+    } finally {
+      setLinkingDevice(false);
+    }
+  };
+
+  const handleDeletePasskey = (id: string, name: string) => {
+    Alert.alert(
+      'Remove Key?',
+      `Delete link for ${name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive', 
+          onPress: async () => {
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            await supabase.functions.invoke('passkey-register', {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${currentSession?.access_token}` },
+              body: { passkey_id: id }
+            });
+            loadPasskeys();
+          }
+        }
+      ]
+    );
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all password fields');
-      return;
-    }
-
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      Alert.alert('Error', 'Passwords mismatch');
       return;
     }
-
-    if (newPassword.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters');
-      return;
-    }
-
     setChangingPassword(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-
-      Alert.alert('Success', 'Password updated successfully');
-      setCurrentPassword('');
+      Alert.alert('Success', 'Password updated');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to change password');
+      Alert.alert('Error', err.message);
     } finally {
       setChangingPassword(false);
     }
   };
 
-  const handleEnableBiometric = async () => {
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Authenticate to enable biometric login',
-        fallbackLabel: 'Use password',
-      });
-
-      if (result.success) {
-        setBiometricEnabled(true);
-        Alert.alert('Success', 'Biometric authentication enabled');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', 'Failed to enable biometric authentication');
-    }
-  };
-
-  const handleDisableBiometric = () => {
-    Alert.alert(
-      'Disable Biometric',
-      'Are you sure you want to disable biometric authentication?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disable',
-          style: 'destructive',
-          onPress: () => setBiometricEnabled(false),
-        },
-      ]
-    );
-  };
-
   return (
     <ScrollView style={styles.container}>
-      {/* Password Change */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Change Password</Text>
+        <Text style={styles.cardTitle}>Hardware Security</Text>
+        <Text style={styles.description}>Link your device to the vault.</Text>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>New Password</Text>
-          <TextInput
-            style={styles.input}
-            value={newPassword}
-            onChangeText={setNewPassword}
-            placeholder="Enter new password"
-            placeholderTextColor="#666"
-            secureTextEntry
-            editable={!changingPassword}
-          />
-        </View>
+        {loadingKeys ? (
+          <ActivityIndicator color="#4CAF50" />
+        ) : (
+          <View style={styles.keyList}>
+            {passkeys.map(key => (
+              <View key={key.id} style={styles.keyItem}>
+                <View>
+                  <Text style={styles.keyName}>{key.device_name}</Text>
+                  <Text style={styles.keyMeta}>{new Date(key.created_at).toLocaleDateString()}</Text>
+                </View>
+                <TouchableOpacity onPress={() => handleDeletePasskey(key.id, key.device_name)}>
+                  <Text style={styles.deleteLink}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Confirm New Password</Text>
-          <TextInput
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm new password"
-            placeholderTextColor="#666"
-            secureTextEntry
-            editable={!changingPassword}
-          />
-        </View>
-
-        <TouchableOpacity
-          style={[styles.saveButton, changingPassword && styles.buttonDisabled]}
-          onPress={handleChangePassword}
-          disabled={changingPassword}
+        <TouchableOpacity 
+          style={[styles.linkButton, linkingDevice && styles.buttonDisabled]} 
+          onPress={handleLinkDevice}
+          disabled={linkingDevice}
         >
-          {changingPassword ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>Update Password</Text>
-          )}
+          {linkingDevice ? <ActivityIndicator color="#fff" /> : <Text style={styles.linkButtonText}>Link This Device</Text>}
         </TouchableOpacity>
       </View>
 
-      {/* Biometric Authentication */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Biometric Authentication</Text>
-
-        {biometricAvailable === null ? (
-          <ActivityIndicator color="#4CAF50" />
-        ) : biometricAvailable ? (
-          <>
-            <Text style={styles.description}>
-              Use fingerprint or face recognition for quick and secure login.
-            </Text>
-
-            <View style={styles.biometricRow}>
-              <View style={styles.biometricStatus}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    biometricEnabled ? styles.statusEnabled : styles.statusDisabled,
-                  ]}
-                />
-                <Text style={styles.statusText}>
-                  {biometricEnabled ? 'Enabled' : 'Disabled'}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.biometricButton,
-                  biometricEnabled ? styles.disableButton : styles.enableButton,
-                ]}
-                onPress={biometricEnabled ? handleDisableBiometric : handleEnableBiometric}
-              >
-                <Text
-                  style={[
-                    styles.biometricButtonText,
-                    biometricEnabled ? styles.disableButtonText : styles.enableButtonText,
-                  ]}
-                >
-                  {biometricEnabled ? 'Disable' : 'Enable'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.description}>
-            Biometric authentication is not available on this device.
-          </Text>
-        )}
-      </View>
-
-      {/* Session Info */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Current Session</Text>
-
-        <View style={styles.sessionInfo}>
-          <Text style={styles.label}>Signed in as</Text>
-          <Text style={styles.sessionValue}>{user?.email}</Text>
+        <Text style={styles.cardTitle}>Master Password</Text>
+        <View style={styles.field}>
+          <Text style={styles.label}>New Password</Text>
+          <TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
         </View>
-
-        <Text style={styles.hint}>
-          Signing out will end this session and require you to log in again.
-        </Text>
+        <View style={styles.field}>
+          <Text style={styles.label}>Confirm Password</Text>
+          <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+        </View>
+        <TouchableOpacity style={styles.saveButton} onPress={handleChangePassword} disabled={changingPassword}>
+          <Text style={styles.saveButtonText}>Update Password</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    padding: 16,
-  },
-  card: {
-    backgroundColor: '#252542',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  field: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 8,
-    padding: 12,
-    color: '#fff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  description: {
-    fontSize: 14,
-    color: '#888',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  biometricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  biometricStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  statusEnabled: {
-    backgroundColor: '#4CAF50',
-  },
-  statusDisabled: {
-    backgroundColor: '#888',
-  },
-  statusText: {
-    fontSize: 14,
-    color: '#fff',
-  },
-  biometricButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  enableButton: {
-    backgroundColor: '#4CAF50',
-  },
-  disableButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#f44336',
-  },
-  biometricButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  enableButtonText: {
-    color: '#fff',
-  },
-  disableButtonText: {
-    color: '#f44336',
-  },
-  sessionInfo: {
-    marginBottom: 12,
-  },
-  sessionValue: {
-    fontSize: 16,
-    color: '#fff',
-    marginTop: 4,
-  },
-  hint: {
-    fontSize: 12,
-    color: '#666',
-  },
+  container: { flex: 1, backgroundColor: '#1a1a2e', padding: 16 },
+  card: { backgroundColor: '#252542', borderRadius: 12, padding: 20, marginBottom: 16 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
+  description: { fontSize: 14, color: '#888', marginBottom: 20 },
+  keyList: { marginBottom: 20 },
+  keyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#333' },
+  keyName: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  keyMeta: { color: '#666', fontSize: 12 },
+  deleteLink: { color: '#f44336', fontSize: 13 },
+  linkButton: { backgroundColor: '#4CAF50', borderRadius: 8, padding: 16, alignItems: 'center' },
+  linkButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  field: { marginBottom: 16 },
+  label: { fontSize: 13, color: '#888', marginBottom: 8 },
+  input: { backgroundColor: '#1a1a2e', borderRadius: 8, padding: 12, color: '#fff', fontSize: 16, borderWidth: 1, borderColor: '#333' },
+  saveButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 8 },
+  saveButtonText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
+  buttonDisabled: { opacity: 0.6 },
 });

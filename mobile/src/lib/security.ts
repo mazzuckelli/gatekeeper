@@ -1,88 +1,58 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 
-const GHOST_SECRET_KEY = 'gatekeeper_ghost_secret';
+const BIOMETRIC_ENABLED_KEY = 'gatekeeper_biometric_enabled';
+const USER_CREDENTIALS_KEY = 'gatekeeper_user_credentials';
 
 export interface BiometricStatus {
   hasHardware: boolean;
   isEnrolled: boolean;
-  supportedTypes: LocalAuthentication.AuthenticationType[];
 }
 
-/**
- * Check if the device supports biometrics and has them enrolled
- */
-export async function getBiometricStatus(): Promise<BiometricStatus> {
+export async function checkBiometricStatus(): Promise<BiometricStatus> {
   const hasHardware = await LocalAuthentication.hasHardwareAsync();
   const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-  const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-
-  return {
-    hasHardware,
-    isEnrolled,
-    supportedTypes,
-  };
+  return { hasHardware, isEnrolled };
 }
 
-/**
- * Authenticate the user using biometrics
- * 
- * @param reason - Reason for biometric prompt (e.g. "Log into Dawg Tag")
- */
-export async function authenticateWithBiometrics(reason: string = 'Authenticate with Gatekeeper'): Promise<boolean> {
-  const status = await getBiometricStatus();
-  
-  if (!status.hasHardware || !status.isEnrolled) {
-    return false;
+export async function isBiometricEnabled(): Promise<boolean> {
+  const enabled = await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY);
+  return enabled === 'true';
+}
+
+export async function setBiometricEnabled(enabled: boolean): Promise<void> {
+  await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, enabled ? 'true' : 'false');
+  if (!enabled) {
+    await SecureStore.deleteItemAsync(USER_CREDENTIALS_KEY);
   }
-
-  const result = await LocalAuthentication.authenticateAsync({
-    promptMessage: reason,
-    fallbackLabel: 'Use Passcode',
-    disableDeviceFallback: false,
-    cancelLabel: 'Cancel',
-  });
-
-  return result.success;
 }
 
-/**
- * Securely store the ghost_secret
- * 
- * In a real implementation, we would generate this cryptographically.
- * For now, we'll store a placeholder or passed value.
- */
-export async function saveGhostSecret(secret: string): Promise<void> {
-  await SecureStore.setItemAsync(GHOST_SECRET_KEY, secret, {
-    keychainService: 'gatekeeper',
-    // On iOS/Android, this ensures the value is encrypted and only accessible on this device
+export async function saveCredentials(email: string, password: string): Promise<void> {
+  const credentials = JSON.stringify({ email, password });
+  await SecureStore.setItemAsync(USER_CREDENTIALS_KEY, credentials, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
 }
 
-/**
- * Retrieve the ghost_secret
- */
-export async function getGhostSecret(): Promise<string | null> {
-  return await SecureStore.getItemAsync(GHOST_SECRET_KEY, {
-    keychainService: 'gatekeeper',
-  });
+export async function getCredentials(): Promise<{ email: string; password: string } | null> {
+  const credentials = await SecureStore.getItemAsync(USER_CREDENTIALS_KEY);
+  if (!credentials) return null;
+  try {
+    return JSON.parse(credentials);
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Check if biometrics are linked (ghost_secret exists)
- */
-export async function isBiometricLinked(): Promise<boolean> {
-  const secret = await getGhostSecret();
-  return !!secret;
-}
+export async function authenticateWithBiometrics(reason: string = 'Log in to Gatekeeper'): Promise<boolean> {
+  const status = await checkBiometricStatus();
+  if (!status.hasHardware || !status.isEnrolled) return false;
 
-/**
- * Remove the link (delete ghost_secret)
- */
-export async function unlinkBiometrics(): Promise<void> {
-  await SecureStore.deleteItemAsync(GHOST_SECRET_KEY, {
-    keychainService: 'gatekeeper',
+  const result = await LocalAuthentication.authenticateAsync({
+    promptMessage: reason,
+    fallbackLabel: 'Use Password',
+    disableDeviceFallback: false,
   });
+
+  return result.success;
 }

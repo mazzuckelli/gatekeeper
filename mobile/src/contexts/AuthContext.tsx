@@ -4,11 +4,6 @@ import { Session, User } from '@supabase/supabase-js';
 
 /**
  * AuthContext for Gatekeeper Mobile App
- *
- * NOTE: Ghost ID functionality is handled by Dawg Tag.
- * This context handles pure authentication only.
- * Gatekeeper knows WHO you are (identity), Dawg Tag handles
- * the ghost_id that apps see.
  */
 
 interface AuthContextType {
@@ -66,8 +61,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      // Clear state immediately to avoid race conditions
+      setSession(null);
+      setUser(null);
+      
+      // Only call server sign out if we actually have a session
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (currentSession) {
+        await supabase.auth.signOut();
+      }
+    } catch (error) {
+      console.log('Sign out handled gracefully:', error);
+    }
   };
 
   const value = {
