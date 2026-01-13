@@ -35,22 +35,36 @@ export default function SecurityScreen() {
 
   const loadPasskeys = async () => {
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      
-      if (!currentSession?.access_token) {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        console.warn('[Security] No active session');
         setLoadingKeys(false);
         return;
       }
 
-      // Explicitly catch the function error to see the status code
-      const response = await supabase.functions.invoke('passkey-register', {
+      console.log('[Security] Calling passkey-register with token:', session.access_token.substring(0, 20) + '...');
+
+      // Use direct fetch since supabase.functions.invoke doesn't pass Authorization header correctly
+      const functionUrl = `${process.env.EXPO_PUBLIC_GATEKEEPER_URL}/functions/v1/passkey-register`;
+      const fetchResponse = await fetch(functionUrl, {
         method: 'GET',
-        headers: { Authorization: `Bearer ${currentSession.access_token}` }
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': process.env.EXPO_PUBLIC_GATEKEEPER_PUBLISHABLE_KEY || '',
+          'Content-Type': 'application/json',
+        },
       });
+
+      const response = {
+        data: fetchResponse.ok ? await fetchResponse.json() : null,
+        error: fetchResponse.ok ? null : new Error(`HTTP ${fetchResponse.status}`),
+      };
       
       if (response.error) {
         console.warn('[Security] Function returned error:', response.error);
-        // If it's a 401/403, we might want to know
+        console.warn('[Security] Error context:', JSON.stringify(response.error, null, 2));
+        console.warn('[Security] Response data:', response.data);
         setPasskeys([]);
       } else {
         setPasskeys(response.data?.passkeys || []);

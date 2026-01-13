@@ -14,7 +14,12 @@ Deno.serve(async (req) => {
   const origin = req.headers.get('Origin')
 
   try {
+    // Log all headers to debug
+    console.log('[Passkey] All headers:', JSON.stringify(Object.fromEntries(req.headers.entries())))
+
     const authHeader = req.headers.get('Authorization')
+    console.log('[Passkey] Authorization header:', authHeader ? authHeader.substring(0, 30) + '...' : 'MISSING')
+
     if (!authHeader) {
       console.error('[Passkey] Missing Authorization header')
       return errorResponse('Missing Auth Header', 401, origin)
@@ -28,6 +33,8 @@ Deno.serve(async (req) => {
 
     if (authError || !user) {
       console.error('[Passkey] Auth failed:', authError?.message)
+      console.error('[Passkey] Auth error details:', JSON.stringify(authError, null, 2))
+      console.error('[Passkey] Using publishable key prefix:', GATEKEEPER_PUBLISHABLE_KEY?.substring(0, 20))
       return errorResponse('Unauthorized', 401, origin)
     }
     console.log(`[Passkey] Authenticated user: ${user.id}`)
