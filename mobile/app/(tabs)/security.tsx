@@ -17,7 +17,6 @@ interface PasskeyInfo {
   id: string;
   device_name: string;
   created_at: string;
-  last_used_at: string | null;
 }
 
 export default function SecurityScreen() {
@@ -31,17 +30,11 @@ export default function SecurityScreen() {
   const [linkingDevice, setLinkingDevice] = useState(false);
 
   useEffect(() => {
-    // Only load if we have a valid session
-    if (session?.access_token) {
-      loadPasskeys();
-    } else {
-      setLoadingKeys(false);
-    }
-  }, [session]);
+    loadPasskeys();
+  }, []);
 
   const loadPasskeys = async () => {
     try {
-      // Ensure we have the most up to date session
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       
       if (!currentSession?.access_token) {
@@ -49,72 +42,41 @@ export default function SecurityScreen() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('passkey-register', {
+      // Explicitly catch the function error to see the status code
+      const response = await supabase.functions.invoke('passkey-register', {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${currentSession.access_token}`
-        }
+        headers: { Authorization: `Bearer ${currentSession.access_token}` }
       });
       
-      if (error) {
-        // Log the specific error from the function
-        console.warn('[Passkey-List] Function error:', error);
+      if (response.error) {
+        console.warn('[Security] Function returned error:', response.error);
+        // If it's a 401/403, we might want to know
         setPasskeys([]);
       } else {
-        setPasskeys(data?.passkeys || []);
+        setPasskeys(response.data?.passkeys || []);
       }
     } catch (err: any) {
-      console.error('[Passkey-List] Exception:', err.message);
+      console.error('[Security] Fetch Exception:', err.message);
     } finally {
       setLoadingKeys(false);
     }
   };
 
   const handleLinkDevice = async () => {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    
-    if (!currentSession?.access_token) {
-      Alert.alert('Error', 'Please log in again to register hardware.');
-      return;
-    }
-
     setLinkingDevice(true);
     try {
       const result = await registerPasskey(user?.email || '');
       if (result.success) {
-        Alert.alert('Success', 'Hardware key registered.');
+        Alert.alert('Success', 'Device linked.');
         loadPasskeys();
       } else {
-        Alert.alert('Error', result.error || 'Registration failed');
+        Alert.alert('Registration Error', result.error);
       }
     } catch (err: any) {
       Alert.alert('Error', 'Hardware communication failed.');
     } finally {
       setLinkingDevice(false);
     }
-  };
-
-  const handleDeletePasskey = (id: string, name: string) => {
-    Alert.alert(
-      'Remove Key?',
-      `Delete link for ${name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive', 
-          onPress: async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            await supabase.functions.invoke('passkey-register', {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${currentSession?.access_token}` },
-              body: { passkey_id: id }
-            });
-            loadPasskeys();
-          }
-        }
-      ]
-    );
   };
 
   const handleChangePassword = async () => {
@@ -140,23 +102,19 @@ export default function SecurityScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Hardware Security</Text>
-        <Text style={styles.description}>Link your device to the vault.</Text>
+        <Text style={styles.description}>Manage your physical device keys.</Text>
 
         {loadingKeys ? (
-          <ActivityIndicator color="#4CAF50" />
+          <ActivityIndicator color="#4CAF50" style={{ marginVertical: 10 }} />
         ) : (
           <View style={styles.keyList}>
             {passkeys.map(key => (
               <View key={key.id} style={styles.keyItem}>
-                <View>
-                  <Text style={styles.keyName}>{key.device_name}</Text>
-                  <Text style={styles.keyMeta}>{new Date(key.created_at).toLocaleDateString()}</Text>
-                </View>
-                <TouchableOpacity onPress={() => handleDeletePasskey(key.id, key.device_name)}>
-                  <Text style={styles.deleteLink}>Delete</Text>
-                </TouchableOpacity>
+                <Text style={styles.keyName}>{key.device_name}</Text>
+                <Text style={styles.keyMeta}>{new Date(key.created_at).toLocaleDateString()}</Text>
               </View>
             ))}
+            {passkeys.length === 0 && <Text style={styles.emptyText}>No devices linked yet.</Text>}
           </View>
         )}
 
@@ -170,15 +128,9 @@ export default function SecurityScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Master Password</Text>
-        <View style={styles.field}>
-          <Text style={styles.label}>New Password</Text>
-          <TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.label}>Confirm Password</Text>
-          <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
-        </View>
+        <Text style={styles.cardTitle}>Change Password</Text>
+        <TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} placeholder="New Password" secureTextEntry />
+        <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm" secureTextEntry />
         <TouchableOpacity style={styles.saveButton} onPress={handleChangePassword} disabled={changingPassword}>
           <Text style={styles.saveButtonText}>Update Password</Text>
         </TouchableOpacity>
@@ -193,16 +145,14 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
   description: { fontSize: 14, color: '#888', marginBottom: 20 },
   keyList: { marginBottom: 20 },
-  keyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#333' },
-  keyName: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  keyItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#333' },
+  keyName: { color: '#fff', fontSize: 15 },
   keyMeta: { color: '#666', fontSize: 12 },
-  deleteLink: { color: '#f44336', fontSize: 13 },
+  emptyText: { color: '#666', fontStyle: 'italic', textAlign: 'center' },
   linkButton: { backgroundColor: '#4CAF50', borderRadius: 8, padding: 16, alignItems: 'center' },
   linkButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  field: { marginBottom: 16 },
-  label: { fontSize: 13, color: '#888', marginBottom: 8 },
-  input: { backgroundColor: '#1a1a2e', borderRadius: 8, padding: 12, color: '#fff', fontSize: 16, borderWidth: 1, borderColor: '#333' },
-  saveButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 8 },
-  saveButtonText: { color: '#4CAF50', fontSize: 16, fontWeight: '600' },
+  input: { backgroundColor: '#1a1a2e', borderRadius: 8, padding: 12, color: '#fff', marginBottom: 12, borderWidth: 1, borderColor: '#333' },
+  saveButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#4CAF50', borderRadius: 8, padding: 16, alignItems: 'center' },
+  saveButtonText: { color: '#4CAF50', fontSize: 16 },
   buttonDisabled: { opacity: 0.6 },
 });
