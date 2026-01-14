@@ -23,6 +23,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SignJWT, importJWK } from 'https://deno.land/x/jose@v5.2.0/index.ts'
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -318,22 +319,54 @@ async function handleVerifyAssertion(
     })
     .eq('id', credential.id)
 
-  // Generate a session for the user using admin API
-  const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
-    type: 'magiclink',
-    email: '', // We'll get email from user
-  })
-
-  // Get user email for session generation
-  const { data: userData, error: userError } = await supabase.auth.admin.getUserById(credential.user_id)
-  if (userError || !userData?.user?.email) {
-    console.error('[PASSKEY-AUTH] Failed to get user data:', userError)
-    return errorResponse('Failed to create session', 500, origin)
+  // ------------------------------------------------------------------
+  // Generate verification_token for mint-session
+  // ------------------------------------------------------------------
+  const attestationKeyJson = Deno.env.get('ATTESTATION_SIGNING_KEY')
+  if (!attestationKeyJson) {
+    console.error('[PASSKEY-AUTH] ATTESTATION_SIGNING_KEY not configured')
+    return errorResponse('Server configuration error', 500, origin)
   }
 
-  // Create a session for the user
-  // Note: We use generateLink to create a one-time token, but for passkey we'll use a custom approach
-  // For now, we'll signal success and let the client handle session creation differently
+  let verificationToken: string
+  let attestation: string
+  try {
+    const attestationKey = JSON.parse(attestationKeyJson)
+    const privateKey = await importJWK(attestationKey, 'ES256')
+    const now = Math.floor(Date.now() / 1000)
+
+    // Verification token for mint-session (30 seconds, single use)
+    verificationToken = await new SignJWT({
+      type: 'passkey_verified',
+    })
+      .setProtectedHeader({ alg: 'ES256', typ: 'JWT' })
+      .setIssuer('gatekeeper-passkey')
+      .setAudience('mint-session')
+      .setSubject(credential.user_id)
+      .setIssuedAt(now)
+      .setExpirationTime(now + 30)
+      .setJti(crypto.randomUUID())
+      .sign(privateKey)
+
+    // Attestation for Dawg Tag flow (5 minutes)
+    attestation = await new SignJWT({
+      type: 'attestation',
+      valid: true,
+      auth_level: 'biometric',
+    })
+      .setProtectedHeader({ alg: 'ES256', typ: 'JWT' })
+      .setIssuer('gatekeeper')
+      .setAudience('ghost-auth')
+      .setIssuedAt(now)
+      .setExpirationTime(now + 300)
+      .setJti(crypto.randomUUID())
+      .sign(privateKey)
+
+    console.log('[PASSKEY-AUTH] Generated verification token and attestation')
+  } catch (err) {
+    console.error('[PASSKEY-AUTH] Failed to generate tokens:', err)
+    return errorResponse('Failed to generate tokens', 500, origin)
+  }
 
   // Get user's subscription tier
   const { data: profile } = await supabase
@@ -363,11 +396,15 @@ async function handleVerifyAssertion(
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', credential.user_id)
 
-  // Return user_id and tier to Dawg Tag
-  // CRITICAL: Dawg Tag must use this transiently and discard
+  // Return tokens and user info
+  // - verification_token: for mint-session to create Supabase session
+  // - attestation: for Dawg Tag flow (no user_id)
+  // - user_id: for Gatekeeper mobile app to call mint-session
   return jsonResponse({
     user_id: credential.user_id,
     tier: tier,
+    verification_token: verificationToken,
+    attestation: attestation,
   }, 200, origin)
 }
 

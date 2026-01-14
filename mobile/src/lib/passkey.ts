@@ -176,8 +176,45 @@ export async function authenticateWithPasskey(): Promise<{ success: boolean; err
     }
 
     const authData = await verifyResponse.json();
-
     console.log('[Passkey] Auth successful, user_id:', authData?.user_id);
+
+    // ------------------------------------------------------------------
+    // Call mint-session to get Supabase tokens
+    // ------------------------------------------------------------------
+    const mintUrl = `${process.env.EXPO_PUBLIC_GATEKEEPER_URL}/functions/v1/mint-session`;
+    console.log('[Passkey] Calling mint-session...');
+
+    const mintResponse = await fetch(mintUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': process.env.EXPO_PUBLIC_GATEKEEPER_PUBLISHABLE_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        verification_token: authData.verification_token,
+        user_id: authData.user_id,
+      }),
+    });
+
+    if (!mintResponse.ok) {
+      const errorText = await mintResponse.text();
+      throw new Error(`Session minting failed: ${errorText}`);
+    }
+
+    const sessionData = await mintResponse.json();
+    console.log('[Passkey] Session minted, setting session...');
+
+    // Set the session in Supabase client
+    const { error: setSessionError } = await supabase.auth.setSession({
+      access_token: sessionData.access_token,
+      refresh_token: sessionData.refresh_token,
+    });
+
+    if (setSessionError) {
+      throw new Error(`Failed to set session: ${setSessionError.message}`);
+    }
+
+    console.log('[Passkey] Session set successfully');
     return { success: true };
   } catch (error: any) {
     console.error('[Passkey] Auth error:', error);
