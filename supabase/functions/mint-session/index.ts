@@ -52,16 +52,25 @@ Deno.serve(async (req) => {
 
     let verifiedUserId: string
     try {
+      console.log('[MINT-SESSION] Parsing attestation key...')
       const attestationKey = JSON.parse(attestationKeyJson)
-      const publicKey = await importJWK(attestationKey, 'ES256')
+      console.log('[MINT-SESSION] Key type:', attestationKey.kty, 'crv:', attestationKey.crv, 'has d:', !!attestationKey.d)
 
+      // Extract only the public key components (remove private key 'd' parameter)
+      const { d: _privateKey, ...publicKeyOnly } = attestationKey
+      console.log('[MINT-SESSION] Importing public key for verification...')
+      const publicKey = await importJWK(publicKeyOnly, 'ES256')
+      console.log('[MINT-SESSION] Public key imported successfully')
+
+      console.log('[MINT-SESSION] Verifying token (first 50 chars):', verification_token.substring(0, 50))
       const { payload } = await jwtVerify(verification_token, publicKey, {
         issuer: 'gatekeeper-passkey',
         audience: 'mint-session',
       })
+      console.log('[MINT-SESSION] Token verified, payload type:', payload.type)
 
       if (payload.type !== 'passkey_verified') {
-        throw new Error('Invalid token type')
+        throw new Error('Invalid token type: ' + payload.type)
       }
 
       verifiedUserId = payload.sub as string
@@ -71,8 +80,9 @@ Deno.serve(async (req) => {
       }
 
       console.log('[MINT-SESSION] Verification token valid for user:', verifiedUserId)
-    } catch (err) {
-      console.error('[MINT-SESSION] Verification token invalid:', err)
+    } catch (err: any) {
+      console.error('[MINT-SESSION] Verification token invalid:', err.message || err)
+      console.error('[MINT-SESSION] Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err)))
       return errorResponse('Invalid verification token', 401, origin)
     }
 
