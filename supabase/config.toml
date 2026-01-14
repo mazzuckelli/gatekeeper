@@ -28,3 +28,23 @@ verify_jwt = false
 [functions.mint-session]
 # Allow unauthenticated access - this endpoint validates via verification_token
 verify_jwt = false
+
+[functions.stripe-webhook]
+# Stripe signs webhooks with its own signature, not JWT
+verify_jwt = false
+
+[functions.create-checkout]
+# Requires authenticated user
+verify_jwt = true
+
+[functions.create-portal-session]
+# Requires authenticated user
+verify_jwt = true
+
+[functions.create-payment]
+# Requires authenticated user
+verify_jwt = true
+
+[functions.create-verification-session]
+# Requires authenticated user
+verify_jwt = true

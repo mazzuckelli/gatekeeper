@@ -11,6 +11,10 @@
  * - invoice.payment_succeeded
  * - invoice.payment_failed
  * - checkout.session.completed
+ * - payment_intent.succeeded (one-time purchases)
+ * - payment_intent.payment_failed (one-time purchases)
+ * - identity.verification_session.verified (KYC)
+ * - identity.verification_session.requires_input (KYC failed)
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -406,6 +410,122 @@ serve(async (req) => {
         } else {
           console.log('[STRIPE] Checkout completed but missing user_id or customer_id for linking');
         }
+        break;
+      }
+
+      // ============================================
+      // ONE-TIME PURCHASE EVENTS
+      // ============================================
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data?.object;
+        if (!paymentIntent) {
+          console.error('[STRIPE] Missing payment intent data');
+          break;
+        }
+
+        const paymentIntentId = paymentIntent.id;
+
+        // Complete the purchase in our database
+        const { data: completed, error: completeError } = await supabase.rpc('complete_purchase', {
+          p_payment_intent_id: paymentIntentId,
+        });
+
+        if (completeError) {
+          console.error('[STRIPE] Complete purchase error:', completeError);
+        } else if (completed) {
+          console.log(`[STRIPE] Purchase completed for payment intent ${paymentIntentId}`);
+        } else {
+          // No matching purchase found - might be a subscription payment
+          console.log(`[STRIPE] No pending purchase found for payment intent ${paymentIntentId}`);
+        }
+        break;
+      }
+
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data?.object;
+        if (!paymentIntent) {
+          console.error('[STRIPE] Missing payment intent data');
+          break;
+        }
+
+        const paymentIntentId = paymentIntent.id;
+
+        // Mark the purchase as failed
+        const { error: failError } = await supabase
+          .from('user_purchases')
+          .update({ status: 'failed' })
+          .eq('stripe_payment_intent_id', paymentIntentId)
+          .eq('status', 'pending');
+
+        if (failError) {
+          console.error('[STRIPE] Mark purchase failed error:', failError);
+        } else {
+          console.log(`[STRIPE] Purchase marked as failed for payment intent ${paymentIntentId}`);
+        }
+        break;
+      }
+
+      // ============================================
+      // IDENTITY VERIFICATION EVENTS
+      // ============================================
+      case 'identity.verification_session.verified': {
+        const verificationSession = event.data?.object;
+        if (!verificationSession) {
+          console.error('[STRIPE] Missing verification session data');
+          break;
+        }
+
+        const sessionId = verificationSession.id;
+
+        // Determine verification level based on what was verified
+        let level = 'document';
+        if (verificationSession.options?.document?.require_matching_selfie) {
+          level = verificationSession.options?.document?.require_id_number ? 'full' : 'selfie';
+        }
+
+        // Update user's identity verification status
+        const { data: updated, error: verifyError } = await supabase.rpc('update_identity_verification', {
+          p_verification_session_id: sessionId,
+          p_verified: true,
+          p_level: level,
+        });
+
+        if (verifyError) {
+          console.error('[STRIPE] Identity verification update error:', verifyError);
+        } else if (updated) {
+          console.log(`[STRIPE] Identity verified for session ${sessionId} (level: ${level})`);
+        } else {
+          console.log(`[STRIPE] No user found for verification session ${sessionId}`);
+        }
+        break;
+      }
+
+      case 'identity.verification_session.requires_input': {
+        const verificationSession = event.data?.object;
+        if (!verificationSession) {
+          console.error('[STRIPE] Missing verification session data');
+          break;
+        }
+
+        const sessionId = verificationSession.id;
+        const lastError = verificationSession.last_error;
+
+        console.log(`[STRIPE] Verification session ${sessionId} requires input: ${lastError?.code || 'unknown'}`);
+
+        // Log the failure but don't update verified status
+        // User can try again
+        await supabase.rpc('log_audit_event', {
+          p_user_id: null,
+          p_action: 'identity_verification_needs_input',
+          p_category: 'security',
+          p_ip_address: null,
+          p_user_agent: null,
+          p_metadata: {
+            session_id: sessionId,
+            error_code: lastError?.code,
+            error_reason: lastError?.reason,
+          },
+        });
         break;
       }
 
