@@ -1,16 +1,12 @@
 /**
  * Auth Validate Endpoint
  *
- * PURPOSE: Validate user credentials and return user_id to Dawg Tag.
- *
- * This is the ONLY endpoint that returns user_id, and it should ONLY
- * be called by Dawg Tag. The user_id is used transiently in Dawg Tag's
- * RAM to compute ghost_id, then immediately discarded.
+ * PURPOSE: Validate user credentials and return a blind attestation to Dawg Tag.
  *
  * SECURITY:
- * - Dawg Tag receives user_id, computes ghost_id locally, discards user_id
+ * - Dawg Tag receives ONLY an attestation (proof of auth, no user identity)
+ * - Attestation contains NO user_id, NO email, NO identifying information
  * - Gatekeeper never knows which app the user is accessing
- * - Gatekeeper never knows the resulting ghost_id
  *
  * REQUEST:
  * POST /auth-validate
@@ -21,7 +17,7 @@
  *
  * RESPONSE (success):
  * {
- *   "user_id": "uuid",
+ *   "attestation": "jwt...",
  *   "tier": "free|standard|premium|enterprise"
  * }
  *
@@ -32,6 +28,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SignJWT, importJWK } from 'https://deno.land/x/jose@v5.2.0/index.ts'
 import { handleCors, jsonResponse, errorResponse, getCorsHeaders } from '../_shared/cors.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -159,11 +156,60 @@ Deno.serve(async (req) => {
       .update({ last_seen_at: new Date().toISOString() })
       .eq('id', userId)
 
-    // Return user_id and tier to Dawg Tag
-    // CRITICAL: Dawg Tag must use this transiently and discard
+    // Check if user has a registered passkey (for biometric login on future visits)
+    // We return the credential_id so Dawg Tag can store it locally
+    const { data: passkeys } = await serviceClient
+      .from('user_passkeys')
+      .select('credential_id')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .limit(1)
+
+    const credentialId = passkeys?.[0]?.credential_id || null
+
+    // ------------------------------------------------------------------
+    // Generate blind attestation (NO user_id, NO email, NO identifying info)
+    // ------------------------------------------------------------------
+    const attestationKeyJson = Deno.env.get('ATTESTATION_SIGNING_KEY')
+    if (!attestationKeyJson) {
+      console.error('[AUTH-VALIDATE] ATTESTATION_SIGNING_KEY not configured')
+      return errorResponse('Server configuration error', 500, origin)
+    }
+
+    let attestation: string
+    try {
+      const attestationKey = JSON.parse(attestationKeyJson)
+      const privateKey = await importJWK(attestationKey, 'ES256')
+      const now = Math.floor(Date.now() / 1000)
+
+      // Attestation for Dawg Tag (5 minutes)
+      // Contains NO user_id, NO email - just proof that someone authenticated
+      attestation = await new SignJWT({
+        type: 'attestation',
+        valid: true,
+        auth_level: 'password',
+      })
+        .setProtectedHeader({ alg: 'ES256', typ: 'JWT' })
+        .setIssuer('gatekeeper')
+        .setAudience('ghost-auth')
+        .setIssuedAt(now)
+        .setExpirationTime(now + 300)
+        .setJti(crypto.randomUUID())
+        .sign(privateKey)
+
+      console.log('[AUTH-VALIDATE] Generated attestation')
+    } catch (err) {
+      console.error('[AUTH-VALIDATE] Failed to generate attestation:', err)
+      return errorResponse('Failed to generate attestation', 500, origin)
+    }
+
+    // Return attestation, tier, and credential_id to Dawg Tag
+    // NO user_id, NO email - just blind proof of authentication
+    // credential_id allows biometric login on future visits
     return jsonResponse({
-      user_id: userId,
-      tier: tier
+      attestation: attestation,
+      tier: tier,
+      credential_id: credentialId
     }, 200, origin)
 
   } catch (error) {
