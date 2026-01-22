@@ -327,20 +327,21 @@ Deno.serve(async (req) => {
       // Legacy format: Direct credential registration (for backwards compatibility)
       console.log('[PASSKEY-REGISTER] Using legacy registration format')
 
+      // Validate required field
+      if (!body.attestation_object) {
+        return errorResponse('attestation_object is required', 400, origin)
+      }
+
+      // Extract public key from attestation object
+      // This is the authoritative source - it contains the COSE-encoded public key
+      // which we convert to SPKI format for use with WebCrypto verification
       let publicKey: string
-      if (body.public_key) {
-        publicKey = body.public_key
-        console.log('[PASSKEY-REGISTER] Using direct public key from client')
-      } else if (body.attestation_object) {
-        try {
-          publicKey = extractPublicKeyFromAttestation(body.attestation_object)
-          console.log('[PASSKEY-REGISTER] Extracted public key from attestation')
-        } catch (err: any) {
-          console.error('[PASSKEY-REGISTER] Failed to extract public key:', err.message)
-          return errorResponse(`Failed to extract public key: ${err.message}`, 400, origin)
-        }
-      } else {
-        return errorResponse('Missing public_key or attestation_object', 400, origin)
+      try {
+        publicKey = extractPublicKeyFromAttestation(body.attestation_object)
+        console.log('[PASSKEY-REGISTER] Extracted public key from attestation (SPKI format)')
+      } catch (err: any) {
+        console.error('[PASSKEY-REGISTER] Failed to extract public key:', err.message)
+        return errorResponse(`Failed to extract public key: ${err.message}`, 400, origin)
       }
 
       const { data, error } = await supabaseAdmin

@@ -72,16 +72,13 @@ export async function registerPasskey(email: string): Promise<{ success: boolean
     // Save credential_id locally for future authentication
     await SecureStore.setItemAsync(CREDENTIAL_ID_KEY, credential.id);
     console.log('[Passkey] Saved credential_id locally:', credential.id);
-    console.log('[Passkey] Credential response:', JSON.stringify(credential, null, 2));
-
-    // react-native-passkey provides publicKey directly in the response
-    const publicKey = (credential as any).response?.publicKey || (credential as any).publicKey;
-    console.log('[Passkey] Public key from response:', publicKey);
 
     // Use fetch directly to have full control over headers
     const functionUrl = `${process.env.EXPO_PUBLIC_GATEKEEPER_URL}/functions/v1/passkey-register`;
     console.log('[Passkey] Calling passkey-register at:', functionUrl);
 
+    // Send attestation_object to server - the server extracts the public key from it
+    // (react-native-passkey does not provide the public key directly)
     const registerResponse = await fetch(functionUrl, {
       method: 'POST',
       headers: {
@@ -91,7 +88,6 @@ export async function registerPasskey(email: string): Promise<{ success: boolean
       },
       body: JSON.stringify({
         credential_id: credential.id,
-        public_key: publicKey,
         attestation_object: credential.response.attestationObject,
         device_name: `${Platform.OS} - Device Key`,
         authenticator_type: 'platform',
