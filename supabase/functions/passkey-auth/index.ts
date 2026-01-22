@@ -42,14 +42,18 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('GATEKEEPER_SECRET_KEY')!
 const CHALLENGE_EXPIRY_MS = 5 * 60 * 1000
 
 // Relying Party configuration
-const RP_ID = new URL(SUPABASE_URL).hostname
+// IMPORTANT: This must match what the client uses during registration
+// Mobile app uses 'gatekeeper-nine.vercel.app', web app uses window.location.hostname
+const RP_ID = 'gatekeeper-nine.vercel.app'
 const RP_NAME = 'Gatekeeper'
 
-// Expected origins for WebAuthn (Gatekeeper web app and mobile deep links)
+// Expected origins for WebAuthn
+// - Web/iOS: https://gatekeeper-nine.vercel.app
+// - Android: android:apk-key-hash:<base64url of SHA256 cert fingerprint>
+// SHA256 fingerprint from assetlinks.json: 52:88:BF:97:26:03:DA:44:20:87:C4:3E:84:F1:B7:8F:28:A3:D0:09:F9:9F:D7:BC:C8:A9:F1:6D:D7:3C:CD:F9
 const EXPECTED_ORIGINS = [
-  `https://${RP_ID}`,
-  'https://gatekeeper.app', // Production web
-  'gatekeeper://auth', // Mobile deep link
+  'https://gatekeeper-nine.vercel.app',
+  'android:apk-key-hash:Uoi_lyYD2kQgh8Q-hPG3jyij0An5n9e8yKnxbdc8zfk',
 ]
 
 /**
