@@ -1,0 +1,53 @@
+# UI Elements Smoke Test
+# Verifies key UI elements are rendered correctly
+
+appId: com.gatekeeper.mobile
+name: "UI Elements Smoke Test"
+
+---
+
+# Login Screen UI
+- assertVisible: "GATEKEEPER"
+- assertVisible: "Sign in to your account"
+
+# Check branding is consistent
+- assertVisible:
+    text: "GATEKEEPER"
+
+# Verify input fields have proper placeholders
+- assertVisible:
+    text: "Email"
+- assertVisible:
+    text: "Password"
+
+# Verify buttons
+- assertVisible: "Sign In"
+
+# Check legal links
+- assertVisible: "Terms of Service"
+- assertVisible: "Privacy Policy"
+
+# Navigate to registration
+- tapOn: "Sign up"
+
+# Verify registration screen branding
+- assertVisible: "GATEKEEPER"
+- assertVisible: "Create your account"
+
+# Verify registration form
+- assertVisible:
+    text: "Email"
+- assertVisible:
+    text: "Password"
+- assertVisible:
+    text: "Confirm Password"
+- assertVisible: "Create Account"
+
+# Verify legal text
+- assertVisible: "By creating an account, you agree to our"
+- assertVisible: "Terms of Service"
+- assertVisible: "Privacy Policy"
+
+# Go back to login
+- tapOn: "Sign in"
+- assertVisible: "Sign in to your account"

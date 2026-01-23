@@ -1,0 +1,66 @@
+# Registration Flow E2E Test
+# Tests the account creation journey
+
+appId: com.gatekeeper.mobile
+name: "Registration Flow"
+
+---
+
+# Navigate to registration from login screen
+- assertVisible: "GATEKEEPER"
+- tapOn: "Sign up"
+
+# Verify registration screen
+- assertVisible: "Create your account"
+
+# Verify form elements
+- assertVisible:
+    text: "Email"
+- assertVisible:
+    text: "Password"
+- assertVisible:
+    text: "Confirm Password"
+- assertVisible: "Create Account"
+
+# Test validation - empty fields
+- tapOn: "Create Account"
+- assertVisible: "Please fill in all fields"
+
+# Test validation - password mismatch
+- tapOn:
+    text: "Email"
+- inputText: "newuser@example.com"
+
+- tapOn:
+    text: "Password"
+- inputText: "Password123!"
+
+- tapOn:
+    text: "Confirm Password"
+- inputText: "DifferentPassword!"
+
+- tapOn: "Create Account"
+- assertVisible: "Passwords do not match"
+
+# Test validation - password too short
+- clearText
+- tapOn:
+    text: "Password"
+- clearText
+- inputText: "short"
+
+- tapOn:
+    text: "Confirm Password"
+- clearText
+- inputText: "short"
+
+- tapOn: "Create Account"
+- assertVisible: "Password must be at least 8 characters"
+
+# Verify Terms and Privacy links are present
+- assertVisible: "Terms of Service"
+- assertVisible: "Privacy Policy"
+
+# Navigate back to login
+- tapOn: "Sign in"
+- assertVisible: "Sign in to your account"

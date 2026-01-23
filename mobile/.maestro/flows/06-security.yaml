@@ -1,0 +1,52 @@
+# Security & Passkey Flow E2E Test
+# Tests security screen and password change validation
+
+appId: com.gatekeeper.mobile
+name: "Security Flow"
+
+---
+- launchApp:
+    clearState: true
+
+# Login first
+- tapOn:
+    text: "Email"
+- inputText: ${TEST_EMAIL}
+
+- tapOn:
+    text: "Password"
+- inputText: ${TEST_PASSWORD}
+
+- tapOn: "Sign In"
+
+# Wait for dashboard
+- assertVisible: "Account Overview"
+
+# Navigate to Security tab
+- tapOn: "Security"
+
+# Wait for security screen
+- assertVisible: "Hardware Security"
+- assertVisible: "Manage your physical device keys"
+
+# Check for Link Device button
+- assertVisible: "Link This Device"
+
+# Check for password change section
+- scroll
+- assertVisible: "Change Password"
+- assertVisible: "Update Password"
+
+# Test password validation
+- tapOn:
+    text: "New Password"
+- inputText: "newpass123"
+
+- tapOn:
+    text: "Confirm"
+- inputText: "different123"
+
+- tapOn: "Update Password"
+
+# Should show mismatch error
+- assertVisible: "Passwords mismatch"

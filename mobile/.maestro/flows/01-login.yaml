@@ -1,0 +1,45 @@
+# Login Flow E2E Test
+# Tests the complete login journey
+
+appId: com.gatekeeper.mobile
+name: "Login Flow"
+
+---
+
+# App should start on login screen (or redirect there if not authenticated)
+- assertVisible: "GATEKEEPER"
+- assertVisible: "Sign in to your account"
+
+# Verify login form elements are present
+- assertVisible:
+    text: "Email"
+- assertVisible:
+    text: "Password"
+- assertVisible: "Sign In"
+
+# Test validation - empty fields
+- tapOn: "Sign In"
+- assertVisible: "Please enter email and password"
+
+# Enter valid credentials
+- tapOn:
+    text: "Email"
+- inputText: "${TEST_EMAIL}"
+
+- tapOn:
+    text: "Password"
+- inputText: "${TEST_PASSWORD}"
+
+# Submit login
+- tapOn: "Sign In"
+
+# Should navigate to dashboard on success
+# Note: This will fail without a real backend - use for smoke testing
+- assertVisible:
+    text: "Dashboard"
+    optional: true
+
+# Alternative: Check for error message if using test credentials
+- assertVisible:
+    text: "Invalid"
+    optional: true

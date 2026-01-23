@@ -1,0 +1,51 @@
+# Profile Update Flow E2E Test
+# Tests profile editing functionality
+
+appId: com.gatekeeper.mobile
+name: "Profile Update Flow"
+
+---
+- launchApp:
+    clearState: true
+
+# Login first
+- assertVisible: "Sign in to your account"
+
+- tapOn:
+    text: "Email"
+- inputText: ${TEST_EMAIL}
+
+- tapOn:
+    text: "Password"
+- inputText: ${TEST_PASSWORD}
+
+- tapOn: "Sign In"
+
+# Wait for dashboard
+- assertVisible: "Account Overview"
+
+# Navigate to Profile tab
+- tapOn: "Profile"
+
+# Wait for profile to load
+- assertVisible: "Profile Information"
+- assertVisible: "Email cannot be changed"
+
+# Edit display name
+- tapOn:
+    text: "Enter display name"
+- clearText
+- inputText: "Updated Display Name"
+
+# Save changes
+- tapOn: "Save Changes"
+
+# Verify success
+- assertVisible: "Success"
+- assertVisible: "Profile updated successfully"
+
+# Dismiss alert
+- tapOn: "OK"
+
+# Verify name persisted
+- assertVisible: "Updated Display Name"

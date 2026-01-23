@@ -1,0 +1,13 @@
+# Maestro E2E Test Configuration
+# Run with: maestro test .maestro/
+
+appId: com.gatekeeper.mobile
+
+# Environment variables for tests
+env:
+  TEST_EMAIL: "e2e-test@example.com"
+  TEST_PASSWORD: "TestPassword123!"
+
+# Global settings
+flows:
+  - flows/

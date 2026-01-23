@@ -1,0 +1,36 @@
+# Sign Out Flow E2E Test
+# Tests the complete sign out process
+
+appId: com.gatekeeper.mobile
+name: "Sign Out Flow"
+
+---
+- launchApp:
+    clearState: true
+
+# Login first
+- tapOn:
+    text: "Email"
+- inputText: ${TEST_EMAIL}
+
+- tapOn:
+    text: "Password"
+- inputText: ${TEST_PASSWORD}
+
+- tapOn: "Sign In"
+
+# Wait for dashboard
+- assertVisible: "Account Overview"
+
+# Scroll to sign out button
+- scroll
+
+# Sign out
+- tapOn: "Sign Out"
+
+# Verify redirected to login screen
+- assertVisible: "Sign in to your account"
+- assertVisible: "GATEKEEPER"
+
+# Verify no longer on dashboard
+- assertNotVisible: "Account Overview"
