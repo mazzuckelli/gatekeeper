@@ -158,8 +158,8 @@ AS $$
 DECLARE
     v_challenge TEXT;
 BEGIN
-    -- Generate secure random challenge
-    v_challenge := encode(gen_random_bytes(32), 'base64');
+    -- Generate secure random challenge (use extensions.gen_random_bytes or public.gen_random_bytes)
+    v_challenge := encode(extensions.gen_random_bytes(32), 'base64');
 
     INSERT INTO pairing_challenges (user_id, client_app_id, challenge)
     VALUES (p_user_id, p_client_app_id, v_challenge);

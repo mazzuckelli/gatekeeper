@@ -102,7 +102,7 @@ async function handleCreateChallenge(
 
   if (challengeError) {
     console.error('[PAIR-CLIENT] Failed to create challenge:', challengeError)
-    return errorResponse('Failed to create pairing challenge', 500, origin)
+    return errorResponse(`Failed to create pairing challenge: ${challengeError.message}`, 500, origin)
   }
 
   console.log('[PAIR-CLIENT] Challenge created successfully')
